@@ -1,0 +1,30 @@
+# GemmaPilot — root coder agent
+# Competition: Google Gemma 4 Developer Agent Competition (Kaggle)
+# NOTE: all agent/subagent MUST use the single mandated base model.
+model: gemma-4-31b-it-qat-w4a16-ct
+
+# Optional LoRA adapter trained on SWE trajectories (see finetune/).
+# Adapter files live under adapters/main_lora/ (adapter_config.json + adapter_model.safetensors).
+adapter: main_lora
+
+# System prompt loaded via !include (relative to this file).
+system_prompt: !include prompts/system.md
+
+# Tool whitelist — only harness-provided tools + custom subagents are allowed.
+tools:
+  - run_command
+  - read_file
+  - edit_file
+  - write_file
+  - submit_patch
+  - get_status
+  - get_code_neighbors
+  - search_similar_code
+  - get_code_subgraph
+  - agent_tool          # invoke sub_agents/analyzer.yaml (read-only analyst)
+
+# Behavioural guardrails encoded for the model:
+# 1. Always call get_status once after every 3 tool calls to stay under budget.
+# 2. Never patch blindly — must reproduce the failure (reproduce skill) before editing.
+# 3. One minimal, focused diff per submit_patch attempt.
+# 4. Stop and submit_patch only when run_command pytest is GREEN on the target test.
