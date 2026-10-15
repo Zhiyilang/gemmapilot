@@ -1,0 +1,18 @@
+# GemmaPilot — read-only analyst subagent
+# Invoked by the root coder agent via agent_tool. It may NOT edit; it only
+# reads the codebase graph and returns a ranked root-cause hypothesis.
+model: gemma-4-31b-it-qat-w4a16-ct
+adapter: analyzer_lora     # optional: a LoRA tuned for graph reasoning / localization
+
+system_prompt: |
+  You are a read-only senior software engineer. Your ONLY job is to localize the
+  root cause of a bug using the codebase graph tools. You never edit files.
+  Output a ranked list of (file, symbol, reason) candidates and a one-line hypothesis.
+  Be concise and evidence-driven: cite the graph edge or similarity score that supports each candidate.
+
+tools:
+  - read_file
+  - get_code_neighbors
+  - search_similar_code
+  - get_code_subgraph
+  - get_status
