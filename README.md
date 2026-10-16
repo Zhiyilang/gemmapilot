@@ -1,5 +1,7 @@
 # GemmaPilot — Google × Kaggle Gemma 4 Developer Agent Competition
 
+[![CI](https://github.com/Zhiyilang/gemmapilot/actions/workflows/ci.yml/badge.svg)](https://github.com/Zhiyilang/gemmapilot/actions/workflows/ci.yml)
+
 > **竞赛**：[Google – The Gemma 4 Developer Agent Competition](https://www.kaggle.com/competitions/gemma-4-developer-agent/overview)（主办 Google DeepMind）
 > **奖金总额：$100,000** — 主榜 **$65,000**（1st **$37k** / 2nd $18k / 3rd $10k）+ Paper Track **$35,000**（可选，11-12 截止）
 > **我方定位**：自主软件工程智能体（SWE agent）——在 Kaggle 气隙容器内用 **Gemma 4** 自动修复真实 Python bug（SWE-bench 风格 PASS/FAIL）
