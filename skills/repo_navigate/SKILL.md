@@ -17,4 +17,9 @@ steps:
     args: { filepath: "<candidate_file>", start_line: null, end_line: null }
     note: Confirm the offending lines by reading actual source.
 output: A ranked list of (file, symbol, reason) root-cause candidates.
-budget: Use at most 6 graph/tool calls before forming a hypothesis.
+budget: Use at most 4 graph/tool calls before forming a hypothesis. The four
+  steps above ARE the budget -- do not add extra searches. `eval/budget_planner.py`
+  proves that 129 tasks inside the 12 h global budget allow ~15 calls per task
+  in total, and this skill must leave room for reproduce + patch + verify.
+  If 4 calls are not enough, form the best hypothesis you have and move on;
+  re-entry from `verify` is cheaper than exploring forever.
