@@ -59,6 +59,17 @@ attributable to hyper-parameter tuning.
    one `edit_file(old_string, new_string)` per hunk, so supervision is expressed
    in exactly the vocabulary of the 9-tool harness. This removes the
    distribution shift between "predict a diff" and "call a tool".
+4. **Budget-aware training-data curation.** A shared global time budget makes
+   *verbosity* a first-class failure mode: a trajectory that spends 20 tool
+   calls teaches behaviour that loses points even when the patch is correct.
+   `eval/budget_planner.py` derives the per-task allowance from the global
+   budget (129 tasks / 12 h / 20 % sandbox reserve → ~268 s and ~14 calls per
+   task), and `build_trajectories.py` drops any trajectory that exceeds it.
+   Measured: **1 of 59** mined trajectories was over budget (18 calls) and was
+   removed, leaving 58 with max 12 calls. The same arithmetic drives the
+   per-task limits in `eval_config.yaml`: lowering the cap from 1200 s to 360 s
+   raised the number of tasks allowed to stall (hit the cap) before the global
+   budget is exhausted from **4 to 34 of 129**.
 
 ## Planned experiments (fill from logs)
 
@@ -69,6 +80,8 @@ attributable to hyper-parameter tuning.
 | A3 | scaffold + LoRA trained on **verified** trajectories | full method |
 | A4 | A3 with adapter on root agent only vs. root + analyzer sub-agent | adapter placement |
 | A5 | rank `{{16}}` vs `{{32}}` vs `{{64}}` | capacity/budget trade-off |
+| A6 | A3 with vs. without the **over-budget trajectory filter** (contribution 4) | does curation for brevity actually save wall clock |
+| A7 | A3 with per-task cap 360 s vs. 1200 s | cap vs. global-budget interaction |
 
 Metrics: pass@1 (patched repo passes validation tests), **edit-apply rate**
 (fraction of emitted `edit_file` calls whose `old_string` matches — the metric
