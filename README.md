@@ -48,9 +48,9 @@ gemmapilot/
 ├─ eval_config.yaml              # 可选每任务上限（超时/工具调用/轮次）
 ├─ skills/
 │  ├─ repo_navigate/  SKILL.md + scripts/find_symbol.py + resources/nav_playbook.md
-│  ├─ reproduce/      SKILL.md（最小复现）
-│  ├─ patch/          SKILL.md（最小 diff + submit_patch）
-│  └─ verify/         SKILL.md（pytest + 预算）
+│  ├─ reproduce/      SKILL.md + scripts/make_repro.py（生成最小复现，直接报 RED/GREEN）
+│  ├─ patch/          SKILL.md + scripts/check_diff.py（submit_patch 前的 diff 闸门）
+│  └─ verify/         SKILL.md + scripts/summarize_pytest.py（几百行输出压成 ~25 行）
 ├─ finetune/fetch_real_tasks.py      # 从真实仓库挖 bug-fix PR -> tasks.jsonl
 ├─ finetune/build_trajectories.py    # gold diff -> edit_file 轨迹
 ├─ finetune/verify_trajectories.py   # 闸门：证明轨迹在真实源码上打得上去
