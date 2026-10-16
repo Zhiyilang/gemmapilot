@@ -196,6 +196,31 @@ def verify_edits(example) -> bool:
     return applied >= 1 and src == DEMO_FIXED
 
 
+def count_tool_calls(example: dict) -> int:
+    """Number of tool calls a trajectory teaches the model to make.
+
+    The global 12 h budget allows roughly 14 calls per task (see
+    eval/budget_planner.py). A trajectory with 20 edit_file calls is a
+    demonstration of how to blow that budget, so we drop it.
+    """
+    n = 0
+    for m in example.get("messages", []):
+        if m.get("role") != "assistant":
+            continue
+        try:
+            d = json.loads(m["content"])
+        except Exception:
+            continue
+        if isinstance(d, dict) and "tool" in d:
+            n += 1
+    return n
+
+
+# Kept in sync with eval/budget_planner.py SKILL_CALL_BUDGET (13 declared calls)
+# plus one call of headroom.
+MAX_TOOL_CALLS = 14
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--tasks", help="tasks.jsonl with id/repo/issue/gold_patch")
@@ -203,6 +228,10 @@ def main():
     ap.add_argument("--system", default=os.path.join(HERE, "..", "prompts", "system.md"))
     ap.add_argument("--demo", action="store_true", help="use the built-in sample bug")
     ap.add_argument("--verify", action="store_true", help="verify edits actually fix the demo")
+    ap.add_argument("--max-calls", type=int, default=MAX_TOOL_CALLS,
+                    help=f"drop trajectories that teach more tool calls than the "
+                         f"budget allows (default {MAX_TOOL_CALLS}; see "
+                         f"eval/budget_planner.py). 0 disables the filter.")
     a = ap.parse_args()
 
     with open(a.system, "r", encoding="utf-8") as f:
@@ -215,7 +244,7 @@ def main():
     else:
         tasks = [json.loads(l) for l in open(a.tasks, "r", encoding="utf-8") if l.strip()]
 
-    n_ok = n_skip = 0
+    n_ok = n_skip = n_over = 0
     with open(a.out, "w", encoding="utf-8") as f:
         for t in tasks:
             try:
@@ -224,9 +253,18 @@ def main():
                 print(f"skip {t.get('id')}: {e}")
                 n_skip += 1
                 continue
+            # Budget gate: a trajectory that spends more tool calls than the
+            # global 12 h budget allows is teaching behaviour that loses points.
+            # Fine-tuning on it would push the agent toward overspending.
+            if a.max_calls and count_tool_calls(ex) > a.max_calls:
+                print(f"over-budget {t.get('id')}: {count_tool_calls(ex)} "
+                      f"tool calls > {a.max_calls} — dropped")
+                n_over += 1
+                continue
             f.write(json.dumps(ex, ensure_ascii=False) + "\n")
             n_ok += 1
-    print(f"wrote {n_ok} trajectories -> {a.out} (skipped {n_skip})")
+    print(f"wrote {n_ok} trajectories -> {a.out} "
+          f"(skipped {n_skip}, over-budget {n_over})")
 
     if a.verify:
         ex = synthesize(demo_task(), system_prompt)
