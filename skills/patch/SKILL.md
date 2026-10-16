@@ -15,6 +15,15 @@ steps:
       filepath: "<new_module>.py"
       content: "<new helper code>"
     note: Only for new files; never traverse outside /workspace.
+  - call: run_command
+    args:
+      command: "cd /workspace && python skills/patch/scripts/check_diff.py --expect <target_file>"
+    note: >
+      Run this gate BEFORE submit_patch, every time. It reports per-file +/-
+      line counts and flags stray new files, modified TEST files, oversized
+      diffs, and files outside --expect. RESULT: OK = safe to submit;
+      REVIEW = re-scope the edit first. Cheap insurance against a patch that
+      breaks unrelated tests.
   - call: submit_patch
     args: {}
     note: Captures `git diff HEAD` of currently staged/untracked intents. Call ONLY when target test is GREEN.
