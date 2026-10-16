@@ -22,6 +22,12 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      # Gate 0 — the 12 h GLOBAL budget arithmetic stays self-consistent with
+      # eval_config.yaml. Catches the failure mode where per-task limits look
+      # reasonable in isolation but N x limit blows past the global budget.
+      - name: Budget planner
+        run: python eval/budget_planner.py
+
       # Gate 1 — the agent loop actually closes: bug reproduced, patched, verified,
       # and submit_patch reached, using the 9 predefined tools only.
       - name: Orchestration harness
