@@ -1,0 +1,8 @@
+# Optional per-task limits (allowed by the Overview: "You may, but are not required,
+# to set per-task time limits in your submission's eval_config.yaml").
+# The global budget is 12 hours for ALL tasks including sandbox setup; do not blow it.
+evaluation:
+  timeout_seconds: 1200          # per-task wall clock guard
+  max_tool_calls: 60             # per task, prevents runaway trajectories
+  max_time_minutes: 20           # per task
+  max_turns: 30                  # per task
