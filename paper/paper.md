@@ -89,11 +89,11 @@ LoRA specialise rather than discover.
 
 ## 2. Related Work
 
-**SWE agents and benchmarks.** SWE-bench established the task form we target:
+**SWE agents and benchmarks.** SWE-bench [1] established the task form we target:
 given an issue and a repository, produce a patch that turns failing tests green.
-Agent scaffolds (ReAct-style loops, graph-augmented navigation, and
-retrieve-and-repair variants) supply the tool layer; our scaffold is
-deliberately close to the harness the competition fixes, because deviating
+Agent scaffolds (ReAct-style loops [4], graph-augmented navigation [2], and
+retrieve-and-repair variants [3]) supply the tool layer; our scaffold is
+deliberately close to the harness the competition fixes [8], because deviating
 from the tool vocabulary costs distribution shift for no benchmark benefit.
 
 **Post-training for tool use.** Training models to emit structured tool calls
@@ -102,7 +102,9 @@ rejection sampling or RL. We are firmly in the SFT regime, and our
 contribution is orthogonal to the optimiser: we show that *example admission*
 — deciding which trajectories enter the corpus at all — is a lever at least as
 large as rank and learning-rate tuning, because a silently non-executable
-example is worse than no example.
+example is worse than no example. The adapter itself is a QLoRA [6] on the
+quantized Gemma base [7], i.e. the standard parameter-efficient recipe [5]
+applied without modification.
 
 **Data quality for code.** Work on neural code repair has long noted that
 patch-context drift breaks replay-based datasets; the standard mitigation is
@@ -313,6 +315,7 @@ task, brevity curation is decoration.
 - [ ] QLoRA hyper-parameters dumped from `finetune/gemma4_qlora_recipe.py`
 - [ ] adapter placed at `adapters/main_lora/`
 - [ ] every `{{...}}` replaced by a measured number
+- [ ] `python paper/check_paper.py` (no `--allow-placeholders`) prints `RESULT: OK`
 - [ ] converted to PDF and submitted to the paper track before Nov 12, 23:59 UTC
   (no pandoc in the dev environment: render this file to HTML and use the
   browser's print-to-PDF, or `pandoc paper.md -o paper.pdf` if available)
@@ -320,4 +323,35 @@ task, brevity curation is decoration.
 Repository: <https://github.com/Zhiyilang/gemmapilot>. Mining, gating, budget
 planning, and the submission-structure validator all run offline with the
 standard library only; CI (Python 3.10/3.11/3.12) runs the gate, the planner,
-and the structural validator on every push.
+the structural validator, and the paper placeholder audit on every push.
+
+## References
+
+[1] C. E. Jimenez, J. Yang, A. Wettig, S. Yao, K. Pei, O. Press, and
+K. Narasimhan. "SWE-bench: Can Language Models Resolve Real-World GitHub
+Issues?" In *ICLR*, 2024. arXiv:2310.06770.
+
+[2] J. Yang, C. E. Jimenez, A. Wettig, K. Lieret, S. Yao, K. Narasimhan, and
+O. Press. "SWE-agent: Agent-Computer Interfaces Enable Automated Software
+Engineering." In *NeurIPS*, 2024. arXiv:2405.15793.
+
+[3] X. Wang et al. "OpenHands: An Open Platform for AI Software Developers as
+Agents." arXiv:2407.16741, 2024.
+
+[4] S. Yao, J. Zhao, D. Yu, N. Du, I. Shafran, K. Narasimhan, and Y. Cao.
+"ReAct: Synergizing Reasoning and Acting in Language Models." In *ICLR*, 2023.
+arXiv:2210.03629.
+
+[5] E. J. Hu, Y. Shen, P. Wallis, Z. Allen-Zhu, Y. Li, S. Wang, L. Wang, and
+W. Chen. "LoRA: Low-Rank Adaptation of Large Language Models." In *ICLR*, 2022.
+arXiv:2106.09685.
+
+[6] T. Dettmers, A. Pagnoni, A. Holtzman, and L. Zettlemoyer. "QLoRA: Efficient
+Finetuning of Quantized LLMs." In *NeurIPS*, 2023. arXiv:2305.14314.
+
+[7] Gemma Team, Google DeepMind. "Gemma: Open Models Based on Gemini Research
+and Technology." arXiv:2403.08295, 2024. (The mandatory base model
+`gemma-4-31b-it-qat-w4a16-ct` belongs to this model family.)
+
+[8] "Gemma 4 Developer Agent Competition — Paper Track." Kaggle, 2026.
+<https://www.kaggle.com/competitions/gemma-4-developer-agent-paper>.

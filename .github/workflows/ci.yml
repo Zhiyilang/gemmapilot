@@ -49,6 +49,12 @@ jobs:
       - name: Dataset pre-flight
         run: python finetune/gemma4_qlora_recipe.py --dry-run --data demo_train.jsonl
 
+      # Gate 5 — the paper draft cannot rot: required sections, citation<->reference
+      # integrity, substance floor. Placeholders are allowed here (results are not
+      # in yet); the pre-submission run drops --allow-placeholders and must be clean.
+      - name: Paper structure audit (placeholders allowed)
+        run: python paper/check_paper.py --allow-placeholders
+
       # The pytest-output condenser is a skill script: verify it parses real logs.
       - name: verify skill script (parse-only, no pytest needed)
         run: |
