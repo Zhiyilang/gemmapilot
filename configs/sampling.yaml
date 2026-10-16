@@ -1,0 +1,5 @@
+# Generation parameters (loaded via !include from agent.yaml / sub_agents/*.yaml).
+# Conservative decoding: SWE patching rewards precision over creativity.
+temperature: 0.1
+top_p: 0.95
+max_output_tokens: 4096
