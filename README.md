@@ -33,7 +33,7 @@
 2. **图导航优先**：先用 `search_similar_code` / `get_code_neighbors` 定位，再改——避免盲目 patch。
 3. **最小 diff + 测试回执**：只在 pytest 变绿后 `submit_patch`。
 4. **反振荡**：同一处改两次无进展就 `git checkout` 重规划（小模型最常见的死循环）。
-5. **LoRA 后训练**：`finetune/gemma4_qlora_recipe.py` 在 Kaggle L4x4 上做 QLoRA，提升 tool-call 精度与 patch 正确率。
+5. **LoRA 后训练 + 真实轨迹数据**：`finetune/gemma4_qlora_recipe.py` 在 Kaggle L4x4 上做 QLoRA；训练数据不是合成玩具，而是从开发集同源四仓库挖出的 59 个真实 bug-fix PR，且每个轨迹都经 `verify_trajectories.py` 验证能在真实源码上打得上去（59/59）。
 6. **预算自律**：`get_status` 常态化 + `eval_config.yaml` 每任务上限，防止单任务吃掉 12 小时。
 
 ## 目录结构
@@ -51,11 +51,39 @@ gemmapilot/
 │  ├─ reproduce/      SKILL.md（最小复现）
 │  ├─ patch/          SKILL.md（最小 diff + submit_patch）
 │  └─ verify/         SKILL.md（pytest + 预算）
+├─ finetune/fetch_real_tasks.py      # 从真实仓库挖 bug-fix PR -> tasks.jsonl
+├─ finetune/build_trajectories.py    # gold diff -> edit_file 轨迹
+├─ finetune/verify_trajectories.py   # 闸门：证明轨迹在真实源码上打得上去
 ├─ finetune/gemma4_qlora_recipe.py   # Kaggle L4x4 QLoRA 配方
 ├─ eval/local_harness.py             # 9 工具本地模拟器 + 编排闭环（可跑）
 ├─ eval/validate_zip.py              # 提交结构校验器（可跑，13 项通过）
 └─ LICENSE                           # Apache-2.0（获奖许可要求）
 ```
+
+## 训练数据管线（真实数据，非合成玩具）
+
+公开开发集已确认为 **FastAPI / Rich / Requests / HTTPX**。LoRA 的上限由轨迹质量决定，
+所以训练数据直接来自这四个仓库的真实 bug-fix PR：
+
+```bash
+export GH_TOKEN=ghp_...                     # 60 req/h(匿名) vs 5000 req/h(带 token)
+python finetune/fetch_real_tasks.py --limit 25 --pages 6 --out finetune/tasks.jsonl
+python finetune/verify_trajectories.py --tasks finetune/tasks.jsonl --max 59
+python finetune/build_trajectories.py --tasks finetune/tasks.jsonl --out finetune/train.jsonl
+```
+
+**当前实测（2026-10-16）**：抓到 **59 个真实任务 / 1051 行真实改动**，
+`verify_trajectories.py` **59/59 PASS**。
+
+`verify_trajectories.py` 是这条管线里最重要的一环：它按 `base_sha` 拉真实源码，
+用两条**互相独立**的代码路径分别得到结果——(a) 顺序应用合成出的 `edit_file` 操作，
+(b) 直接应用 gold unified diff——再断言 `a == b`。任何一条轨迹若其 `old_string`
+在真实文件里不存在，都会被判 FAIL 并剔除。没有这道闸门，静默产出的脏数据会
+白白烧掉整个 Kaggle 微调预算。
+
+> 数据出处：补丁片段来自上述四个上游仓库的公开合并 PR（MIT / Apache-2.0 / BSD）。
+> 生成的 `tasks.jsonl` / `train.jsonl` **不入库**（可本地重生成，且属第三方派生内容），
+> 推送脚本已按 `.jsonl` 与 >100KB 排除。
 
 ## 本地开发循环（无 GPU 也能迭代）
 
@@ -63,7 +91,8 @@ gemmapilot/
 cd gemmapilot
 python eval/local_harness.py                       # 编排闭环冒烟（MockPolicy 修样本 bug）
 python eval/validate_zip.py --zip submission.zip   # 结构合规校验（13 项）
-# 两处全绿后，把 agent.yaml/prompts/skills/configs 打进 submission.zip
+python finetune/verify_trajectories.py --tasks finetune/tasks.jsonl --max 20
+# 三处全绿后，把 agent.yaml/prompts/skills/configs 打进 submission.zip
 # 在 Kaggle notebook（L4x4）跑 finetune/gemma4_qlora_recipe.py 产出 adapters/main_lora
 ```
 
