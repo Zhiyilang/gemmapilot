@@ -1,16 +1,28 @@
 # GemmaPilot — root coder agent
 # Competition: Google Gemma 4 Developer Agent Competition (Kaggle)
-# NOTE: all agent/subagent MUST use the single mandated base model.
+# Config language: Google ADK Agent Config (adk.dev/agents/config) + competition restrictions.
+#
+# HARD RULES COMPLIANCE:
+#  - All agents/subagents must use the SAME base model.
+#  - Only the 9 harness tools + sub-agents via agent_tool are allowed.
+#  - Do NOT declare run_skill_script / load_skill_resource as tools (not in the closed
+#    ToolRegistry -> compile failure). Custom logic ships as skill SCRIPTS and is
+#    invoked via run_command inside the sandbox.
+#  - No path traversal (../ or symlinks) outside the submission root.
+
+agent_class: LlmAgent
+name: gemmapilot_coder
 model: gemma-4-31b-it-qat-w4a16-ct
+adapter: main_lora                 # optional: adapters/main_lora/ (PEFT, safetensors)
 
-# Optional LoRA adapter trained on SWE trajectories (see finetune/).
-# Adapter files live under adapters/main_lora/ (adapter_config.json + adapter_model.safetensors).
-adapter: main_lora
+description: >
+  Autonomous software-engineering agent. Localizes root cause via the code graph,
+  reproduces the failure, applies a minimal patch, and verifies with tests before
+  calling submit_patch.
 
-# System prompt loaded via !include (relative to this file).
-system_prompt: !include prompts/system.md
+instruction: !include prompts/system.md
+generate_content_config: !include configs/sampling.yaml
 
-# Tool whitelist — only harness-provided tools + custom subagents are allowed.
 tools:
   - run_command
   - read_file
@@ -21,10 +33,12 @@ tools:
   - get_code_neighbors
   - search_similar_code
   - get_code_subgraph
-  - agent_tool          # invoke sub_agents/analyzer.yaml (read-only analyst)
+  - agent_tool:
+      config_path: sub_agents/code_analyzer.yaml
+      skip_summarization: true
 
-# Behavioural guardrails encoded for the model:
-# 1. Always call get_status once after every 3 tool calls to stay under budget.
-# 2. Never patch blindly — must reproduce the failure (reproduce skill) before editing.
-# 3. One minimal, focused diff per submit_patch attempt.
-# 4. Stop and submit_patch only when run_command pytest is GREEN on the target test.
+skills:
+  - skills/repo_navigate
+  - skills/reproduce
+  - skills/patch
+  - skills/verify
