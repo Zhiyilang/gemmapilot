@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  gates:
+    name: python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # Gate 1 — the agent loop actually closes: bug reproduced, patched, verified,
+      # and submit_patch reached, using the 9 predefined tools only.
+      - name: Orchestration harness
+        run: python eval/local_harness.py
+
+      # Gate 2 — the submission archive matches the competition's hard rules
+      # (agent.yaml at root, legal base model, same model everywhere, only the 9
+      # allowed tools, !include targets resolve, skill frontmatter, no traversal).
+      - name: Submission structure validator
+        run: python eval/validate_zip.py --zip submission.zip
+
+      # Gate 3 — gold unified diff really converts into applicable edit_file ops.
+      # Offline demo only: fetching real PRs needs a GitHub token.
+      - name: Trajectory synthesis (demo + verify)
+        run: python finetune/build_trajectories.py --demo --verify --out demo_train.jsonl
+
+      # Gate 4 — the generated data would actually survive a training run
+      # (schema, no truncation of the trailing submit_patch action).
+      - name: Dataset pre-flight
+        run: python finetune/gemma4_qlora_recipe.py --dry-run --data demo_train.jsonl
+
+      # The pytest-output condenser is a skill script: verify it parses real logs.
+      - name: verify skill script (parse-only, no pytest needed)
+        run: |
+          python - <<'PY'
+          import subprocess, sys, textwrap, os
+          log = textwrap.dedent("""\
+              collected 42 items
+              FAILED tests/test_routing.py::test_a - AssertionError: assert None == 'x'
+              ==== 1 failed, 41 passed in 3.21s ====
+          """)
+          open("_ci_pytest.log", "w").write(log)
+          out = subprocess.run([sys.executable, "skills/verify/scripts/summarize_pytest.py",
+                                "--log", "_ci_pytest.log"], capture_output=True, text=True)
+          print(out.stdout)
+          assert "RESULT: FAILED" in out.stdout, out.stdout
+          assert "test_routing.py::test_a" in out.stdout, out.stdout
+          os.remove("_ci_pytest.log")
+          print("summarize_pytest OK")
+          PY
+
+      # The diff gate is a skill script too: minimal diff must be OK.
+      - name: patch skill script (parse-only, no git needed)
+        run: |
+          python - <<'PY'
+          import subprocess, sys, os, textwrap
+          diff = textwrap.dedent("""\
+              diff --git a/fastapi/routing.py b/fastapi/routing.py
+              --- a/fastapi/routing.py
+              +++ b/fastapi/routing.py
+              @@ -210,7 +210,7 @@
+              -        name=None,
+              +        name=self.name,
+          """)
+          open("_ci.diff", "w").write(diff)
+          out = subprocess.run([sys.executable, "skills/patch/scripts/check_diff.py",
+                                "--log", "_ci.diff", "--expect", "fastapi/routing.py"],
+                               capture_output=True, text=True)
+          print(out.stdout)
+          assert "RESULT: OK" in out.stdout, out.stdout
+          os.remove("_ci.diff")
+          print("check_diff OK")
+          PY
