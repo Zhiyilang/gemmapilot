@@ -1,8 +1,31 @@
 # Optional per-task limits (allowed by the Overview: "You may, but are not required,
 # to set per-task time limits in your submission's eval_config.yaml").
-# The global budget is 12 hours for ALL tasks including sandbox setup; do not blow it.
+#
+# THESE NUMBERS ARE DERIVED, NOT GUESSED -- see eval/budget_planner.py
+# ---------------------------------------------------------------------
+# Global budget is 12 h for ALL tasks including sandbox setup.
+# With the public dev set (129 tasks) and a 20 % sandbox reserve:
+#     usable             = 43200 * 0.80 = 34560 s
+#     per-task allowance = 34560 / 129  = 268 s   <-- the real ceiling
+#     minus 2 pytest runs (2 x 45 s)    = 178 s left for LLM calls
+#     at ~12 s per call                 ~ 14 calls/task
+#
+# Therefore:
+#   * timeout_seconds 360 is a RUNAWAY GUARD only. It does not protect the
+#     global budget: 129 x 360 s = 12.9 h already exceeds the usable 9.6 h.
+#     The agent is told (prompts/system.md) to target <=240 s and to submit
+#     unconditionally once it has spent ~70 % of this cap. The cap was lowered
+#     from 1200 s because at 1200 s a stalling task costs 4.5x its allowance --
+#     only 4 tasks out of 129 could stall before the budget was gone.
+#   * max_tool_calls 24 matches "~14 fit + headroom"; 60 (the old value) let a
+#     single task consume several tasks' worth of budget.
+#   * max_turns is the same budget expressed in model turns.
+#
+# IF THE REAL EVAL SET SIZE DIFFERS, RE-RUN:
+#     python eval/budget_planner.py --tasks <N> --reserve <frac> --call <s> --test <s>
+# It exits non-zero when the committed config no longer fits the global budget.
 evaluation:
-  timeout_seconds: 1200          # per-task wall clock guard
-  max_tool_calls: 60             # per task, prevents runaway trajectories
-  max_time_minutes: 20           # per task
-  max_turns: 30                  # per task
+  timeout_seconds: 360           # per-task runaway guard (target: <=240 s)
+  max_tool_calls: 24             # per task; ~14 fit, see planner
+  max_time_minutes: 6            # per task
+  max_turns: 24                  # per task
