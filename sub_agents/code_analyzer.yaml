@@ -1,0 +1,23 @@
+# GemmaPilot — read-only code analyzer subagent (AgentTool)
+# Invoked by the root agent. It may NOT edit; it only reads the graph and source
+# and returns a ranked root-cause hypothesis.
+agent_class: LlmAgent
+name: gemmapilot_analyzer
+# MUST match the root agent's model exactly (mixing models is not allowed).
+model: gemma-4-31b-it-qat-w4a16-ct
+# Optional: adapters/tool_lora/
+adapter: tool_lora
+
+description: >
+  Read-only senior engineer. Localizes the root cause using code-graph tools and
+  returns a ranked (file, symbol, reason) hypothesis. Never edits files.
+
+instruction: !include prompts/analyzer.md
+generate_content_config: !include configs/sampling.yaml
+
+tools:
+  - read_file
+  - get_code_neighbors
+  - search_similar_code
+  - get_code_subgraph
+  - get_status
