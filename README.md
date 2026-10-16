@@ -96,9 +96,19 @@ python finetune/verify_trajectories.py --tasks finetune/tasks.jsonl --max 20
 # 在 Kaggle notebook（L4x4）跑 finetune/gemma4_qlora_recipe.py 产出 adapters/main_lora
 ```
 
+## Paper Track（$35k，**11-12 截止，比主榜早 3 周**）
+
+官方另设论文赛道，主题含「**PEFT / RL 提升 SWE agent 能力**」——正是本仓在做的事，
+且**鼓励使用官方发布的图/嵌入数据集**。需在 <https://www.kaggle.com/competitions/gemma-4-developer-agent-paper> **单独报名**。
+
+骨架见 [`paper/OUTLINE.md`](paper/OUTLINE.md)（含可证伪性声明：若"未验证数据"训出的效果
+不差于"验证过的数据"，则我们的核心贡献 1 不成立，仍如实发表）。
+所有数字均为占位符，**跑完 LoRA 后必须逐个替换为实测值再投**。
+
 ## 已知待验证项
 
 - `skills:` 键的**确切取值格式**（目录路径 vs 名称）未在本地可验证——官方要求以数据集内 `HARNESS_README.md` 为准。加入竞赛并下载数据集后，请跑一次官方 `validate_submission.py` / `compile_submission` 复核。
 - 真实推理质量只能在 Kaggle 容器内验证（本地 harness 只验证编排与接线）。
+- ⚠️ **不要相信二手奖金稿**：有第三方站点宣称本赛有 Unsloth / LiteRT / llama.cpp-GGUF / Best New Application 各 $10k 专项奖、且报名截止 11-02。**官方 Overview 页面均无这些奖项，报名截止为 11-25、总奖 $100k（主榜 $65k + 论文 $35k）**。一律以官方页为准。
 
 详见 `SUBMISSION.md`。
