@@ -62,8 +62,22 @@ class Workspace:
         return f"[rc={r.returncode}]\nSTDOUT:\n{r.stdout}\nSTDERR:\n{r.stderr}"
 
     def submit_patch(self):
+        # Mirror the harness: stage intents, then diff against HEAD. If HEAD is
+        # missing (or git is unhappy) fall back to an index diff rather than
+        # silently returning an EMPTY patch — an empty patch used to look like
+        # "the fix did not apply" and masked real setup failures.
         r = subprocess.run("git add -N . && git diff HEAD", shell=True,
                             cwd=self.root, capture_output=True, text=True)
+        if r.returncode != 0 or not r.stdout.strip():
+            fb = subprocess.run("git add -N . && git diff", shell=True,
+                                cwd=self.root, capture_output=True, text=True)
+            self.last_patch = fb.stdout or ""
+            note = ("[submit_patch] `git diff HEAD` failed "
+                    f"(rc={r.returncode}) {r.stderr.strip()[:200]}; "
+                    "used index diff instead")
+            if not self.last_patch.strip():
+                note += " — WARNING: patch is still empty"
+            return note
         self.last_patch = r.stdout
         return "patch captured"
 
@@ -158,8 +172,30 @@ def build_sample_bug(root: str):
         f.write("def add(a, b):\n    return a - b   # BUG: should be a + b\n")
     with open(os.path.join(root, "test_calc.py"), "w", encoding="utf-8") as f:
         f.write("def test_add():\n    assert add(2, 3) == 5\n")
-    subprocess.run("git init -q && git add -A && git commit -qm init",
-                   shell=True, cwd=root, capture_output=True)
+
+    # CI runners have NO git identity configured, so `git commit` fails there and
+    # the repo ends up with no HEAD -> submit_patch's `git diff HEAD` returns
+    # nothing -> the harness reports a false failure. Set the identity LOCALLY
+    # (never touch the user's global config) and fail loudly if the commit
+    # still does not happen.
+    steps = [
+        "git init -q",
+        "git config user.email gemmapilot@example.invalid",
+        "git config user.name GemmaPilot Harness",
+        "git config commit.gpgsign false",
+        "git add -A",
+        "git commit -qm init",
+    ]
+    for s in steps:
+        r = subprocess.run(s, shell=True, cwd=root, capture_output=True, text=True)
+        if r.returncode != 0:
+            raise RuntimeError(
+                f"sample repo setup failed at `{s}` (rc={r.returncode}):\n"
+                f"{r.stdout}\n{r.stderr}")
+    check = subprocess.run("git rev-parse --verify HEAD", shell=True, cwd=root,
+                           capture_output=True, text=True)
+    if check.returncode != 0:
+        raise RuntimeError("sample repo has no HEAD; submit_patch cannot diff")
 
 
 def main():
