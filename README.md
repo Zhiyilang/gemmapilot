@@ -85,6 +85,30 @@ python finetune/build_trajectories.py --tasks finetune/tasks.jsonl --out finetun
 > 生成的 `tasks.jsonl` / `train.jsonl` **不入库**（可本地重生成，且属第三方派生内容），
 > 推送脚本已按 `.jsonl` 与 >100KB 排除。
 
+## 在 Kaggle 跑微调（顺序别错）
+
+1. 把 `train.jsonl` 作为 **Kaggle Dataset** 上传（它不在 git 仓库里，见上文），挂到 notebook。
+2. ⚠️ **L4 会话无网络**：`--model_id` 必须指向挂载进来的模型输入，例如
+   `/kaggle/input/gemma-4/transformers/gemma-4-31b-it-qat-w4a16-ct/1`。
+   确切路径以竞赛 **Data** 页为准——填错就是加载 31B 失败、白烧配额。
+3. **先跑本地预检（不需要 GPU）**：
+   `python finetune/gemma4_qlora_recipe.py --dry-run --data finetune/train.jsonl`
+   实测：59 行 / ~8.5 万 token / 最长 3999 token / 548 个 assistant turn（489 个是工具调用）→ OK。
+   负向测试确认它会拦住"缺 system / 空 system / 无 assistant turn / 超长截断"并退出 1。
+4. 正式训练（脚本会先自动跑一遍预检，失败即拒绝启动）：
+
+```bash
+python finetune/gemma4_qlora_recipe.py \
+  --model_id /kaggle/input/gemma-4/transformers/gemma-4-31b-it-qat-w4a16-ct/1 \
+  --data /kaggle/input/gemmapilot-trajectories/train.jsonl \
+  --adapter_dir /kaggle/working/adapters/main_lora \
+  --lora_r 64 --lora_alpha 128 --epochs 1 --holdout 6
+```
+
+默认 `--max_len 8192`（不是 4096：最长轨迹已到 3999 token，4096 会截掉结尾的 `submit_patch`）。
+默认开启 `--mask-prompt`：**只对 assistant token 计损失**，不浪费容量去背 system/user；
+若分词器取不到 offset 会自动回退为全序列损失并告警。`--seed` 固定，`--holdout N` 留末尾 N 条做评估（论文消融要用）。
+
 ## 本地开发循环（无 GPU 也能迭代）
 
 ```bash
