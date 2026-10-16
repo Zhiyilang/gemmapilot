@@ -314,6 +314,8 @@ task, brevity curation is decoration.
 - [ ] adapter placed at `adapters/main_lora/`
 - [ ] every `{{...}}` replaced by a measured number
 - [ ] converted to PDF and submitted to the paper track before Nov 12, 23:59 UTC
+  (no pandoc in the dev environment: render this file to HTML and use the
+  browser's print-to-PDF, or `pandoc paper.md -o paper.pdf` if available)
 
 Repository: <https://github.com/Zhiyilang/gemmapilot>. Mining, gating, budget
 planning, and the submission-structure validator all run offline with the
