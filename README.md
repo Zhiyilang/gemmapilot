@@ -145,6 +145,12 @@ python finetune/verify_trajectories.py --tasks finetune/tasks.jsonl --max 20
 官方另设论文赛道，主题含「**PEFT / RL 提升 SWE agent 能力**」——正是本仓在做的事，
 且**鼓励使用官方发布的图/嵌入数据集**。需在 <https://www.kaggle.com/competitions/gemma-4-developer-agent-paper> **单独报名**。
 
+**正式草稿已写完**：[`paper/paper.md`](paper/paper.md) —— 引言 / 相关工作 / 方法
+（挖掘→双路径闸门→最小 diff 序列化→预算感知策展→QLoRA）/ 实验设置（7 组消融）/
+讨论与可证伪性 / 复现清单全部完成，**只有第 5 节结果表是占位符**。文中所有"实测"数字
+（59 任务 / 1,193 行改动 / 59-59 验证 / 58 条轨迹 7–12 次调用 / 268s·14 调用预算）均与
+当前仓库实测一致，已逐项复核。
+
 骨架见 [`paper/OUTLINE.md`](paper/OUTLINE.md)（含可证伪性声明：若"未验证数据"训出的效果
 不差于"验证过的数据"，则我们的核心贡献 1 不成立，仍如实发表）。
 所有数字均为占位符，**跑完 LoRA 后必须逐个替换为实测值再投**。
