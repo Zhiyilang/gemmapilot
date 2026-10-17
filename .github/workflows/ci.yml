@@ -44,6 +44,13 @@ jobs:
       - name: Trajectory synthesis (demo + verify)
         run: python finetune/build_trajectories.py --demo --verify --out demo_train.jsonl
 
+      # Gate 3b — the A2 ablation's naive converter (gate OFF) stays reproducible:
+      # it must synthesize and its drift detector must fire on the built-in
+      # drifted example. Offline self-test; the falsification arm of the paper
+      # is a CI-protected artifact, not a manual step.
+      - name: Naive converter self-test (A2 ablation)
+        run: python finetune/build_naive_trajectories.py --demo --check-base
+
       # Gate 4 — the generated data would actually survive a training run
       # (schema, no truncation of the trailing submit_patch action).
       - name: Dataset pre-flight

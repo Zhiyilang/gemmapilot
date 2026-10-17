@@ -311,6 +311,7 @@ task, brevity curation is decoration.
 ## 7. Reproducibility
 
 - [ ] `tasks.jsonl` and `train.jsonl` regenerated and hashed
+- [ ] A2 naive corpus regenerated via `finetune/build_naive_trajectories.py` and drift measured with `--check-base` (expected 0 on this corpus — the pre-declared tie, Section 6; full procedure in `finetune/TRAINING_RUNBOOK.md`)
 - [ ] base commit SHAs recorded per task (already stored as `base_sha`)
 - [ ] QLoRA hyper-parameters dumped from `finetune/gemma4_qlora_recipe.py`
 - [ ] adapter placed at `adapters/main_lora/`
