@@ -153,7 +153,13 @@ naive 脚本加 `--max-calls 0` 重建含超预算轨迹的语料，再训练：
 1. adapter 落到 `adapters/main_lora/`，hash 记入复现清单
 2. 按第 6 节映射表填 `paper/paper.md` 的所有 `{{...}}`（含 Abstract 里的 4 个）
 3. `python paper/check_paper.py`（**不加** `--allow-placeholders`）→ 必须 `RESULT: OK`
-4. 转 PDF：无 pandoc → 浏览器打开渲染后的 HTML → Ctrl+P → 存为 PDF（竞赛要求 PDF）
+4. 转 PDF（**渲染器已备好，一条命令**）：
+   ```bash
+   python paper/render_pdf.py --check   # 提交闸门：有 {{...}} 残留就 exit 1
+   python paper/render_pdf.py           # 生成 paper/paper.html（A4 打印优化）
+   ```
+   浏览器打开 `paper.html` → Ctrl+P → 目标选「另存为 PDF」→ 纸张 A4、边距默认、**勾选「背景图形」**（占位符红框和表格底纹需要它）。页顶若有红色 STOP 横幅 = 还有占位符没填，回去补。
+   （本地预览可起 `python -m http.server` 后访问 `http://127.0.0.1:8000/paper/paper.html`）
 5. **11-12 23:59 UTC 前**提交到 Paper 赛道
 
 ---

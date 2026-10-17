@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gemma 4 Developer Agent — Paper</title>
+<style>
+@page { size: A4; margin: 18mm 16mm; }
+* { box-sizing: border-box; }
+body { font-family: "Segoe UI", "Microsoft YaHei", Georgia, serif;
+       color: #1a1a1a; background: #fff; margin: 0 auto;
+       max-width: 860px; padding: 32px 28px; line-height: 1.65;
+       font-size: 11pt; }
+h1 { font-size: 20pt; border-bottom: 2px solid #2b6cb0; padding-bottom: 8px; }
+h2 { font-size: 14pt; color: #2b6cb0; margin-top: 28px;
+     border-bottom: 1px solid #cbd5e0; padding-bottom: 4px; }
+h3 { font-size: 12pt; color: #2c5282; margin-top: 20px; }
+table { border-collapse: collapse; width: 100%; margin: 14px 0;
+        font-size: 9.5pt; page-break-inside: avoid; }
+th, td { border: 1px solid #a0aec0; padding: 5px 8px; text-align: left;
+         vertical-align: top; }
+th { background: #edf2f7; }
+code { font-family: Consolas, "Cascadia Code", monospace; font-size: 9pt;
+       background: #f0f0f0; padding: 1px 4px; border-radius: 3px; }
+pre { background: #f7f7f7; border: 1px solid #ddd; border-left: 3px solid #2b6cb0;
+      padding: 10px 12px; overflow-x: auto; font-size: 8.5pt;
+      page-break-inside: avoid; }
+pre code { background: none; padding: 0; }
+blockquote { border-left: 3px solid #a0aec0; margin: 12px 0;
+             padding: 4px 14px; color: #4a5568; background: #fafafa; }
+a { color: #2b6cb0; }
+.ph { background: #fed7d7; color: #9b2c2c; font-weight: bold;
+      padding: 0 4px; border: 1px dashed #e53e3e; border-radius: 3px; }
+#banner { background: #fff5f5; border: 2px solid #e53e3e; color: #9b2c2c;
+          padding: 12px 16px; border-radius: 6px; margin-bottom: 24px;
+          font-weight: bold; }
+#banner small { font-weight: normal; display: block; margin-top: 6px; }
+@media print { body { padding: 0; max-width: none; } #banner { page-break-after: avoid; } }
+</style>
+</head>
+<body>
+<div id="banner">STOP: 26 placeholder(s) still in the draft — fill them in before printing.<small>Every red box below is an unfilled value. Run <code>python paper/render_pdf.py --check</code> to verify.</small></div>
+<h1>Verified Trajectory Synthesis: Mining Real-World Pull Requests to Parameter-Efficiently Post-Train a 31B Open Model into an Offline SWE Agent</h1>
+<p><strong>Track:</strong> Gemma 4 Developer Agent Competition — Paper Submission Award <strong>Status:</strong> DRAFT — Sections 1–4, 6, 7 are complete. Section 5 (Results) is a placeholder table; every <code><span class="ph">{{...}}</span></code> must be replaced from <code>finetune/</code> logs before submission. Deadline <strong>November 12, 2026, 23:59 UTC</strong>. <strong>Code:</strong> &lt;https://github.com/Zhiyilang/gemmapilot&gt; (Apache-2.0)</p>
+<hr>
+<h2>Abstract</h2>
+<p>Autonomous software-engineering (SWE) agents are almost exclusively evaluated behind proprietary cloud APIs. We study whether a 4-bit quantized open model (<code>gemma-4-31b-it-qat-w4a16-ct</code>) can be post-trained, with a single consumer-class accelerator and <strong>no internet access</strong>, into a competent repository-navigating bug-fixing agent under a hard global time budget. We make three claims, each backed by machinery that runs today in the accompanying repository. <strong>(1)</strong> The binding constraint is not the fine-tuning method but the <em>verifiability of the supervision signal</em>: converting gold patches into <code>edit_file</code> actions silently produces operations whose <code>old_string</code> does not occur in the target file, teaching the model to emit edits that fail at execution time. We therefore certify every training example with a <strong>dual-path verification gate</strong> — synthesize the trajectory with one code path, independently apply the raw gold diff with another, and admit the example only if both results are byte-identical — fetching true source at the PR's <code>base_sha</code>. On a corpus of <strong>59 real merged bug-fix PRs</strong> mined from the target repositories the gate certifies <strong>59/59</strong>, i.e. the corpus is provably clean rather than hopefully clean; ablation A2 tests whether this matters. <strong>(2)</strong> Verbosity is a first-class failure mode under a global budget, so we derive the per-task allowance arithmetically (129 tasks / 12 h / 20 % sandbox reserve → <strong>268 s and ~14 tool calls per task</strong>) and filter training trajectories against it; <strong>1 of 59</strong> mined trajectories exceeded the call budget and was removed. <strong>(3)</strong> A fixed 8-stage, graph-first scaffold is what the adapter specialises, rather than learning tool use from scratch. Verified-data training improves pass@1 from <code><span class="ph">{{BASELINE}}</span></code> to <code><span class="ph">{{FINAL}}</span></code>, and the gate is worth <code><span class="ph">{{DELTA}}</span></code> points — <code><span class="ph">{{GATE_VS_TUNING}}</span></code> the benefit attributable to hyper-parameter tuning. We report negative results as-is, including the falsification condition under which contribution (1) collapses.</p>
+<hr>
+<h2>1. Introduction</h2>
+<p>Frontier SWE agents (Devin, SWE-agent, OpenHands and successors) pair large proprietary models with long-horizon tool loops. The Gemma 4 Developer Agent Competition asks the inverse question: <em>how far can a single open, quantized 31B model go, offline, on consumer accelerators, inside a 12-hour wall-clock budget for the whole evaluation set?</em> That constraint set changes the problem. Latency, tool-call count, and patch minimality are not quality metrics bolted on afterwards — they are the scoreboard.</p>
+<p>Three observations shaped this work.</p>
+<p><strong>Supervision must be executable, not merely plausible.</strong> The natural way to build SWE training data is to mine merged bug-fix pull requests and replay the gold patch. But a replay is only useful if every derived action actually executes against the code the model will see. A diff hunk whose context has drifted, or whose <code>old_string</code> never occurs in the base revision, produces a training example that teaches the model to emit edits that fail at execution time — and it fails <em>silently</em>, because the loss goes down regardless. We treat this as a data-integrity problem and solve it with a gate, not with hope.</p>
+<p><strong>Budget is arithmetic, not a hyper-parameter.</strong> A per-task timeout is a guardrail against runaway tasks; it does nothing for a <em>global</em> budget. If 129 tasks share 12 hours, then 129 × 1200 s = 43 h of nominal capacity is 4.5× the budget, and four stalled tasks starve the remaining 125. We compute the per-task allowance from the global budget and align every downstream artifact — skill call budgets, per-task caps, and the training corpus itself — to that single number.</p>
+<p><strong>Scaffold first, adapter second.</strong> With a small corpus and a fixed tool vocabulary, the most valuable thing an adapter can learn is not <em>what tools exist</em> but <em>how this particular 8-stage repair loop uses them</em>. We therefore train on trajectories that instantiate one fixed policy shape, and let the LoRA specialise rather than discover.</p>
+<p><strong>Contributions.</strong></p>
+<ol><li><strong>Verified trajectory synthesis</strong> — a mining pipeline plus a dual-path</li></ol>
+<p>correctness gate that certifies each training example against the true source at the PR's base revision (Section 3.1–3.2).</p>
+<ol><li><strong>Budget-aware data curation</strong> — a planner that derives per-task allowances</li></ol>
+<p>from the global budget and filters the corpus against them (Section 3.4).</p>
+<ol><li><strong>A minimal-diff action serialization</strong> that expresses supervision in</li></ol>
+<p>exactly the vocabulary of the 9-tool harness (Section 3.3).</p>
+<ol><li><strong>A reproducible, fully offline experimental setup</strong> with seven ablations,</li></ol>
+<p>including the falsification test for contribution 1 (Section 4).</p>
+<h2>2. Related Work</h2>
+<p><strong>SWE agents and benchmarks.</strong> SWE-bench [1] established the task form we target: given an issue and a repository, produce a patch that turns failing tests green. Agent scaffolds (ReAct-style loops [4], graph-augmented navigation [2], and retrieve-and-repair variants [3]) supply the tool layer; our scaffold is deliberately close to the harness the competition fixes [8], because deviating from the tool vocabulary costs distribution shift for no benchmark benefit.</p>
+<p><strong>Post-training for tool use.</strong> Training models to emit structured tool calls is typically done with supervised trajectories (SFT over rollouts) followed by rejection sampling or RL. We are firmly in the SFT regime, and our contribution is orthogonal to the optimiser: we show that <em>example admission</em> — deciding which trajectories enter the corpus at all — is a lever at least as large as rank and learning-rate tuning, because a silently non-executable example is worse than no example. The adapter itself is a QLoRA [6] on the quantized Gemma base [7], i.e. the standard parameter-efficient recipe [5] applied without modification.</p>
+<p><strong>Data quality for code.</strong> Work on neural code repair has long noted that patch-context drift breaks replay-based datasets; the standard mitigation is fuzzy matching or manual filtering. Our gate replaces both with a <em>proof</em>: two independent derivations must agree byte-for-byte, or the example is dropped. This is cheap (a diff apply and a string compare) and catches the failure mode exactly.</p>
+<p><strong>Budgeted evaluation.</strong> Time- and cost-bounded agent evaluation has been studied as a fairness concern; we treat it as a <em>training-time</em> constraint and push it into data curation, which to our knowledge is new.</p>
+<h2>3. Method</h2>
+<h3>3.0 Overview</h3>
+<pre><code>mine real bug-fix PRs ──► tasks.jsonl ──► dual-path gate ──► certified tasks
+                                                              │
+                              budget planner ◄── global budget │
+                                                              ▼
+                              diff→edit_file serialization ──► trajectories
+                                                              │
+                              over-budget filter ──────────────┤
+                                                              ▼
+                                                         train.jsonl ──► QLoRA</code></pre>
+<h3>3.1 Mining (<code>finetune/fetch_real_tasks.py</code>)</h3>
+<p>The public development set for this competition is drawn from four Python repositories — <strong>FastAPI, Rich, Requests, HTTPX</strong> — so we mine from exactly those, using the GitHub REST API. A pull request is admitted as a task when:</p>
+<ol><li>the title reads as a bug fix and the PR is <strong>merged</strong>;</li><li>it is not docs/chore/ci/refactor noise;</li><li>it changes at least one <strong>non-test</strong> <code>.py</code> file <strong>and</strong> touches a test file</li></ol>
+<p>(a repair with no observable test consequence is not trainable);</p>
+<ol><li>the total diff is at most 220 lines (replayable, reviewable, and within a</li></ol>
+<p>task's tool-call budget).</p>
+<p>For each surviving PR we record the issue text (HTML comments, images and PR template boilerplate — "AI Disclaimer" blocks, checklists, repeated titles — stripped), the <code>base_sha</code>, the changed file list, and the <strong>gold unified diff</strong> with <code>--- a/ +++ b/</code> headers rebuilt, because GitHub's per-file patch payload does not include them.</p>
+<p><strong>Measured corpus:</strong> 59 tasks, 1,193 changed lines — FastAPI 13, Rich 25, Requests 9, HTTPX 12. The official development set contains 129 tasks; mining recovers 59 under the strictness above, which we prefer to a larger, noisier corpus because every example must survive the gate anyway.</p>
+<h3>3.2 The dual-path verification gate (<code>finetune/verify_trajectories.py</code>)</h3>
+<p>The gate answers one question per task: <em>do the <code>edit_file</code> actions we synthesized actually reproduce the gold patch when applied to the real base source?</em> It refuses to trust the synthesizer with its own answer.</p>
+<ul><li><strong>Path A (synthesis):</strong> decompose the gold diff into hunks; each hunk becomes</li></ul>
+<p>one <code>edit_file(old_string, new_string)</code>; apply them in order to the base file.</p>
+<ul><li><strong>Path B (independent replay):</strong> apply the raw gold unified diff to the same</li></ul>
+<p>base file with a separate, minimal patch applier.</p>
+<p>Both paths start from the <strong>true file contents at <code>base_sha</code></strong>, fetched through the GitHub contents API (the sandbox blocks <code>raw.githubusercontent.com</code>, so we use <code>/repos/{r}/contents/{path}?ref={sha}</code> with base64 decoding, falling back to <code>/git/blobs/{sha}</code> for large files). A task is admitted only if the two results are <strong>byte-identical</strong>; any mismatch — an <code>old_string</code> that does not occur, a hunk boundary that drifts, a whitespace disagreement — drops the task and is logged.</p>
+<p><strong>Measured:</strong> 59/59 tasks pass. We state this plainly rather than dressing it up: on this corpus the gate found <strong>0</strong> rejects, which <em>certifies</em> the corpus rather than demonstrating a large rescue rate. The question "does certification matter?" is empirical and is answered by ablation A2 (Section 4), in which the same 59 tasks are trained <em>without</em> the gate — i.e. with a naive converter that admits context-drifted <code>old_string</code>s. If A2 ≥ A3, contribution 1 collapses to engineering hygiene and we will say so (Section 6).</p>
+<h3>3.3 Minimal-diff action serialization</h3>
+<p>Each hunk becomes exactly one <code>edit_file</code> call with the hunk's removed lines as <code>old_string</code> and its added lines as <code>new_string</code>. We deliberately do <strong>not</strong> let the model predict diffs, file paths from scratch, or multi-file plans: the harness exposes nine tools, and supervision expressed in that vocabulary removes the predict-a-diff / call-a-tool distribution shift. Pure renames and pure deletions are expressed as degenerate <code>edit_file</code> calls rather than special-cased, so the action space stays at one tool.</p>
+<h3>3.4 Budget-aware curation (<code>eval/budget_planner.py</code>)</h3>
+<p>The competition gives <strong>12 hours globally</strong> for the whole evaluation set (sandbox setup included). The planner turns that into per-task allowances:</p>
+<pre><code>43200 s × (1 − 20 % sandbox/setup reserve) = 34560 s usable
+34560 s ÷ 129 tasks                        = 268 s per task
+268 s − 2 targeted pytest runs (≈90 s)     = 180 s for model+tools
+180 s ÷ 12 s per tool call                 ≈ 14 tool calls per task</code></pre>
+<p>Every input is a <strong>flag</strong>, not a constant: task count, sandbox reserve, per-call latency, and per-test latency are assumptions to be re-measured inside the container and re-derived in one command. The planner also <strong>adjudicates</strong>: it fails the build if the skills' declared call budgets do not fit inside the per-task allowance, or if the allowance is too small to close the 8-stage loop. On first run it failed — the four skills declared 15 calls against 14.8 that fit — and <code>repo_navigate</code> was tightened from 6 to 4 calls, bringing the total to 13.</p>
+<p>The same arithmetic is then applied <strong>to the training corpus</strong> (<code>build_trajectories.py --max-calls 14</code>): a trajectory that spends 18 calls teaches behaviour that loses points even when its patch is correct, so it is dropped. Measured: <strong>1 of 59</strong> trajectories was over budget (18 calls) and removed, leaving 58 with a maximum of 12 calls. Finally the per-task caps in <code>eval_config.yaml</code> were set consistently with the global budget (<code>timeout_seconds</code> 1200 → 360, <code>max_tool_calls</code> 60 → 24): the number of tasks allowed to hit the cap before the global budget dies rose from <strong>4 to 34 of 129</strong>. The planner runs as a CI gate so configuration cannot silently drift away from the arithmetic again.</p>
+<h3>3.5 Scaffold and QLoRA setup</h3>
+<p>The scaffold is a fixed 8-stage loop: <code>get_status → search_similar_code → get_code_neighbors → read_file → HYPOTHESIS → edit_file* → run_command(pytest, targeted) → submit_patch</code>, encoded in <code>prompts/system.md</code> and four ADK skills, each with an executable script (AST symbol location, minimal-repro generation, diff gate, pytest-output summariser). The adapter is a QLoRA on <code>gemma-4-31b-it-qat-w4a16-ct</code>, rank <code><span class="ph">{{RANK}}</span></code>, trained with prompt masking (loss on assistant tokens only) and a fixed seed; <code>--holdout</code> reserves the tail of the corpus for the ablations. Full recipe: <code>finetune/gemma4_qlora_recipe.py</code>, which refuses to start unless an offline pre-flight of the dataset passes (schema, missing turns, and sequence-length headroom — the longest certified trajectory is 3,999 tokens, so <code>max_len</code> is 8,192, not 4,096, which would truncate the closing <code>submit_patch</code>).</p>
+<h2>4. Experimental Setup</h2>
+<p><strong>Model.</strong> <code>gemma-4-31b-it-qat-w4a16-ct</code> (mandatory base for all agents and sub-agents). No frontier APIs; all inference offline.</p>
+<p><strong>Hardware.</strong> Kaggle L4×4 sessions (no network at runtime; the base model must be referenced from mounted input, a mistake that costs a whole session).</p>
+<p><strong>Data.</strong> 59 certified tasks (Section 3.1–3.2), 58 after the budget filter (Section 3.4). Statistics: ~105k tokens total, 529 assistant turns of which 471 are tool calls, longest trajectory ≈14k characters (pre-flight estimate 3,999 tokens), 7–12 tool calls per trajectory.</p>
+<p><strong>Baselines.</strong></p>
+<table><thead><tr><th>ID</th><th>Configuration</th></tr></thead><tbody><tr><td>B0</td><td>base model + scaffold, no adapter</td></tr><tr><td>A2</td><td>scaffold + LoRA on <strong>unverified</strong> trajectories (naive converter, gate off)</td></tr><tr><td>A3</td><td>scaffold + LoRA on <strong>verified</strong> trajectories (full method)</td></tr><tr><td>A4</td><td>A3 with adapter on root agent only vs. root + analyzer sub-agent</td></tr><tr><td>A5</td><td>A3 at rank 16 / 32 / 64</td></tr><tr><td>A6</td><td>A3 with vs. without the over-budget filter</td></tr><tr><td>A7</td><td>A3 with per-task cap 360 s vs. 1200 s</td></tr></tbody></table>
+<p><strong>Metrics.</strong> pass@1 (validation tests green), <strong>edit-apply rate</strong> (fraction of emitted <code>edit_file</code> calls whose <code>old_string</code> occurs — the metric the gate directly targets), tool-call validity rate, trajectory length in calls, and wall-clock consumption against the 12 h global budget.</p>
+<p><strong>Protocol.</strong> Single seed unless stated; the same certified corpus is used for every adapter arm so that A2 vs A3 isolates <em>only</em> the gate. Per-task budget follows the planner: ~268 s, ~14 calls.</p>
+<h2>5. Results <em>(placeholder — fill from logs; do not submit as-is)</em></h2>
+<table><thead><tr><th>Arm</th><th>pass@1</th><th>edit-apply</th><th>calls/task</th><th>wall-clock</th></tr></thead><tbody><tr><td>B0 no adapter</td><td><code><span class="ph">{{B0_PASS1}}</span></code></td><td><code><span class="ph">{{B0_APPLY}}</span></code></td><td><code><span class="ph">{{B0_CALLS}}</span></code></td><td><code><span class="ph">{{B0_TIME}}</span></code></td></tr><tr><td>A2 unverified data</td><td><code><span class="ph">{{A2_PASS1}}</span></code></td><td><code><span class="ph">{{A2_APPLY}}</span></code></td><td><code><span class="ph">{{A2_CALLS}}</span></code></td><td><code><span class="ph">{{A2_TIME}}</span></code></td></tr><tr><td>A3 verified data</td><td><code><span class="ph">{{A3_PASS1}}</span></code></td><td><code><span class="ph">{{A3_APPLY}}</span></code></td><td><code><span class="ph">{{A3_CALLS}}</span></code></td><td><code><span class="ph">{{A3_TIME}}</span></code></td></tr><tr><td>A4 placement</td><td><code><span class="ph">{{A4_PASS1}}</span></code></td><td>—</td><td>—</td><td>—</td></tr><tr><td>A5 rank</td><td><code><span class="ph">{{A5_PASS1}}</span></code></td><td>—</td><td>—</td><td>—</td></tr><tr><td>A6 budget filter</td><td><code><span class="ph">{{A6_PASS1}}</span></code></td><td>—</td><td><code><span class="ph">{{A6_CALLS}}</span></code></td><td><code><span class="ph">{{A6_TIME}}</span></code></td></tr><tr><td>A7 cap</td><td><code><span class="ph">{{A7_PASS1}}</span></code></td><td>—</td><td>—</td><td><code><span class="ph">{{A7_TIME}}</span></code></td></tr></tbody></table>
+<p><strong>The comparison that carries the paper is A2 vs A3</strong>, on identical tasks, differing only in whether the gate admitted the examples.</p>
+<h2>6. Discussion, Limitations, and Falsification</h2>
+<p><strong>What we do not claim.</strong> Trajectories are <em>gold-patch replays</em>, not on-policy rollouts: they teach the shape of a correct repair, not recovery from a failed attempt. Rejection sampling or RL over the certified data is the natural next step and is out of scope. The corpus is mined from the four repositories named in the public development set; generalisation to the hidden repositories is unverified. All results are single-run; we report seeds and variance.</p>
+<p><strong>Falsification.</strong> If A2 ≥ A3 — unverified data trains as well as verified data — then the gate is not doing useful work and contribution 1 reduces to engineering convenience. That is a real possibility and we will report it as-is rather than re-framing it. Conversely, if A3 beats A2 by less than the rank sweep (A5) moves pass@1, we will say that tuning matters more than data certification. The budget claims (contributions 2 and 4) are falsified by A6: if filtering over-budget trajectories does not reduce wall-clock or calls per task, brevity curation is decoration.</p>
+<h2>7. Reproducibility</h2>
+<ul><li>[ ] <code>tasks.jsonl</code> and <code>train.jsonl</code> regenerated and hashed</li><li>[ ] A2 naive corpus regenerated via <code>finetune/build_naive_trajectories.py</code> and drift measured with <code>--check-base</code> (expected 0 on this corpus — the pre-declared tie, Section 6; full procedure in <code>finetune/TRAINING_RUNBOOK.md</code>)</li><li>[ ] base commit SHAs recorded per task (already stored as <code>base_sha</code>)</li><li>[ ] QLoRA hyper-parameters dumped from <code>finetune/gemma4_qlora_recipe.py</code></li><li>[ ] adapter placed at <code>adapters/main_lora/</code></li><li>[ ] every <code><span class="ph">{{...}}</span></code> replaced by a measured number</li><li>[ ] <code>python paper/check_paper.py</code> (no <code>--allow-placeholders</code>) prints <code>RESULT: OK</code></li><li>[ ] converted to PDF and submitted to the paper track before Nov 12, 23:59 UTC</li></ul>
+<p>(no pandoc in the dev environment: render this file to HTML and use the browser's print-to-PDF, or <code>pandoc paper.md -o paper.pdf</code> if available)</p>
+<p>Repository: &lt;https://github.com/Zhiyilang/gemmapilot&gt;. Mining, gating, budget planning, and the submission-structure validator all run offline with the standard library only; CI (Python 3.10/3.11/3.12) runs the gate, the planner, the structural validator, and the paper placeholder audit on every push.</p>
+<h2>References</h2>
+<p>[1] C. E. Jimenez, J. Yang, A. Wettig, S. Yao, K. Pei, O. Press, and K. Narasimhan. "SWE-bench: Can Language Models Resolve Real-World GitHub Issues?" In <em>ICLR</em>, 2024. arXiv:2310.06770.</p>
+<p>[2] J. Yang, C. E. Jimenez, A. Wettig, K. Lieret, S. Yao, K. Narasimhan, and O. Press. "SWE-agent: Agent-Computer Interfaces Enable Automated Software Engineering." In <em>NeurIPS</em>, 2024. arXiv:2405.15793.</p>
+<p>[3] X. Wang et al. "OpenHands: An Open Platform for AI Software Developers as Agents." arXiv:2407.16741, 2024.</p>
+<p>[4] S. Yao, J. Zhao, D. Yu, N. Du, I. Shafran, K. Narasimhan, and Y. Cao. "ReAct: Synergizing Reasoning and Acting in Language Models." In <em>ICLR</em>, 2023. arXiv:2210.03629.</p>
+<p>[5] E. J. Hu, Y. Shen, P. Wallis, Z. Allen-Zhu, Y. Li, S. Wang, L. Wang, and W. Chen. "LoRA: Low-Rank Adaptation of Large Language Models." In <em>ICLR</em>, 2022. arXiv:2106.09685.</p>
+<p>[6] T. Dettmers, A. Pagnoni, A. Holtzman, and L. Zettlemoyer. "QLoRA: Efficient Finetuning of Quantized LLMs." In <em>NeurIPS</em>, 2023. arXiv:2305.14314.</p>
+<p>[7] Gemma Team, Google DeepMind. "Gemma: Open Models Based on Gemini Research and Technology." arXiv:2403.08295, 2024. (The mandatory base model <code>gemma-4-31b-it-qat-w4a16-ct</code> belongs to this model family.)</p>
+<p>[8] "Gemma 4 Developer Agent Competition — Paper Track." Kaggle, 2026. &lt;https://www.kaggle.com/competitions/gemma-4-developer-agent-paper&gt;.</p>
+</body>
+</html>
