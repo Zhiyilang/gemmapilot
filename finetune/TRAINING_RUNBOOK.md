@@ -89,6 +89,11 @@ print("WALLCLOCK_SECONDS", round(time.time() - t0, 1))
   --lora_r 64 --seed 17
 ```
 
+⚠️ **本节结果为可证明命题，非经验问题（2026-10-18 补充论证）**：
+实测 `train_naive.jsonl` 与 `train.jsonl` **字节完全相同**（MD5 `8dc4de28e08bddc5fc31ab66df9a7b2e`，58/58 行逐行一致）。训练路径已核实为**确定性**：`gemma4_qlora_recipe.py` ①数据顺序由文件决定、holdout 为**固定切尾**（`rows[:len-hold]`/`rows[len-hold:]`，行 196–197，不打乱、不依赖 seed）②`torch.manual_seed(seed)`（行 159）与 Trainer `seed=args.seed`（行 245，默认 17）贯穿。
+⇒ **两语料相同 + seed 相同 + holdout 切分相同 ⇒ A2 与 A3 的 adapter 逐权重相同 ⇒ pass@1 构造性相等**。
+**推论**：Run 2 结果在数学上已被保证为平局；跑它只为在论文给出**实测确认**。若想省 ~2h GPU：可只跑 Run 1(A3)，按 Section 6 预声明的平局口径写"A2≡A3 由语料同一性 + 确定性训练保证"——**但必须真跑 A3，并如实标注 A2 为"依构造性论证、未单独复跑"**，不可谎称实测。推荐仍跑（配额充足），"证明 + 实证"双保险写进论文，评审更硬。
+
 ⚠️ **预期管理**：本地实测 naive 语料与 verified **58/58 逐行相同**（gate 0 拒绝）→ **A2≈A3 是预期结果**。论文第 6 节已预先声明此情形（"contribution 1 collapses to engineering hygiene and we will say so"）。若 A2 明显差于 A3，说明语料有毒——如实报告，那是更强的发现。若想主动测「毒数据效应」，可先跑全量 `--check-base` 找漂移样本（本地抽样 0 漂移，预期全量也是 0）。
 
 ### Run 3-5 — A5 rank 扫描（16 / 32 / 64）
