@@ -308,6 +308,18 @@ certification. The budget claims (contributions 2 and 4) are falsified by A6:
 if filtering over-budget trajectories does not reduce wall-clock or calls per
 task, brevity curation is decoration.
 
+**A note on why A2 ≈ A3 is provable, not merely observed.** On the mined
+corpus the gate rejects nothing, so the naive converter emits a corpus
+byte-identical to the verified one (MD5 `8dc4de28…`, 58/58 rows). Training is
+deterministic — data order is file-determined, the holdout is a fixed tail split
+(no shuffling), and a single seed (17) drives both weight init and the trainer.
+Identical corpus, identical seed, and identical split imply the A2 and A3
+adapters agree weight-for-weight, so their pass@1 cannot differ except through
+run-to-run nondeterminism. We therefore treat the tie as a *provable* prediction
+of the pipeline rather than an empirical surprise, and confirm it by running both
+arms; any divergence beyond nondeterminism would itself signal a bug worth
+reporting.
+
 ## 7. Reproducibility
 
 - [ ] `tasks.jsonl` and `train.jsonl` regenerated and hashed
